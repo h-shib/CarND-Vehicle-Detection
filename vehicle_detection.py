@@ -38,7 +38,8 @@ class VehicleDetector:
         scaled_features = X_scaler.transform(features)
         return scaled_features
 
-    def extract_features(self, fnames, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256)):
+    def extract_features(self, fnames, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256), orient=9, pix_per_cell=8,
+                    cell_per_block=2, vis=False, feature_vec=True, hog_channel='ALL'):
         features = []
         for fname in fnames:
             img = mpimg.imread(fname)
@@ -55,7 +56,16 @@ class VehicleDetector:
                 feature_img = np.copy(img)
             spatial_features = cv2.resize(feature_img, spatial_size).ravel()
             hist_features = self.color_hist(feature_img, nbins=hist_nbins, bins_range=hist_bins_range)
-            features.append(np.concatenate((spatial_features, hist_features)))
+            if hog_channel == 'ALL':
+                hog_features = []
+                for ch in range(feature_img.shape[2]):
+                    hog_features.append(self.get_hog_features(feature_img[:, :, ch],orient=orient, pix_per_cell=pix_per_cell,
+                    cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec))
+                hog_features = np.ravel(hog_features)
+            else:
+                hog_features = self.get_hog_features(feature_img,orient=orient, pix_per_cell=pix_per_cell,
+                    cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec)
+            features.append(np.concatenate((spatial_features, hist_features, hog_features)))
         features = np.vstack(features).astype(np.float64)
         return features
 
@@ -66,7 +76,7 @@ class VehicleDetector:
         svc.fit(X_train, y_train)
         t2 = time()
         print(round(t2-t1, 2), "seconds to train model.")
-        model_fname = 'models/vehicle_detect_model.p'
+        model_fname = 'models/vehicle_detect_model3.p'
         pickle.dump(svc, open(model_fname, 'wb'), protocol=4)
         print("Model saved as: ", model_fname)
         print("Test Accuracy: ", svc.score(X_test, y_test))
