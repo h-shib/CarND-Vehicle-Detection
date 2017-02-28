@@ -95,9 +95,9 @@ class VehicleDetector:
             if hog_channel == 'ALL':
                 hog_features = []
                 for ch in range(feature_img.shape[2]):
-                    hog_features.extend(self.get_hog_features(feature_imag[:,:,ch], orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True))
+                    hog_features.extend(self.get_hog_features(feature_img[:,:,ch], orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True))
             else:
-                hog_features = self.get_hog_features(feature_image[:,:,hog_channel], orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
+                hog_features = self.get_hog_features(feature_img[:,:,hog_channel], orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
             img_features.append(hog_features)
         return np.concatenate(img_features)
 
@@ -141,7 +141,7 @@ class VehicleDetector:
         # Return the list of windows
         return window_list
 
-    def search_windows(self, img, windows, clf, scaler, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256), orient=9, pix_per_cell=8, cell_per_block=2, spatial_feat=True, hist_feat=True, hog_feat=True, hog_channel=0):
+    def search_windows(self, img, windows, clf, scaler, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256), orient=9, pix_per_cell=8, cell_per_block=2, spatial_feat=True, hist_feat=True, hog_feat=True, hog_channel='ALL'):
         on_windows = []
         for window in windows:
             test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))
@@ -151,6 +151,16 @@ class VehicleDetector:
             if prediction == 1:
                 on_windows.append(window)
         return on_windows
+
+    def draw_boxes(self, img, bboxes, color=(0, 0, 255), thick=6):
+        # Make a copy of the image
+        imcopy = np.copy(img)
+        # Iterate through the bounding boxes
+        for bbox in bboxes:
+            # Draw a rectangle given bbox coordinates
+            cv2.rectangle(imcopy, bbox[0], bbox[1], color, thick)
+        # Return the image copy with boxes drawn
+        return imcopy
 
     def train_model(self, features, labels):
         # split features and labels into training and test sets.
@@ -166,14 +176,14 @@ class VehicleDetector:
         print("Test Accuracy: ", svc.score(X_test, y_test))
 
         # save the model as pickle file.
-        model_fname = 'models/vehicle_detect_model.p'
+        model_fname = 'models/vehicle_detect_clf.p'
         pickle.dump(svc, open(model_fname, 'wb'), protocol=4)
         print("Model saved as: ", model_fname)
         return svc
 
     def get_trained_models(self, car_fnames, non_car_fnames, update=False):
         # use pickled classifier and scaler if exists
-        if not update and os.path.exists('models/vehicle_detect_clf.p') and os.path.exists('models/vehicle_detect_scaler.p'):
+        if not update and (os.path.exists('models/vehicle_detect_clf.p') and os.path.exists('models/vehicle_detect_scaler.p')):
             clf = pickle.load(open('models/vehicle_detect_clf.p', 'rb'))
             scaler = pickle.load(open('models/vehicle_detect_scaler.p', 'rb'))
             self.clf = clf
@@ -182,9 +192,13 @@ class VehicleDetector:
             return clf, scaler
 
         # train new model
+        print('start updating the models.')
         car_features = self.extract_features(car_fnames)
         non_car_features = self.extract_features(non_car_fnames)
         features = np.vstack((car_features, non_car_features)).astype(np.float64)
+        print("this one")
+        print(features.shape)
+        print(features)
         scaler = self.get_scaler(features)
         scaled_features = scaler.transform(features)
         labels = np.hstack((np.ones(len(car_features)), np.zeros(len(non_car_features))))
@@ -205,25 +219,31 @@ if __name__ == '__main__':
     non_car_dir = 'non-vehicles'
 
     # extract car file names
+    print('start reading file names.')
     car_fnames = []
     for directory in os.listdir(car_dir):
         for fname in os.listdir(os.path.join(car_dir, directory)):
             car_fnames.append(os.path.join(car_dir, directory, fname))
+    print('finish reading car file names.')
 
     # extract non car file names
     non_car_fnames = []
     for directory in os.listdir(non_car_dir):
         for fname in os.listdir(os.path.join(non_car_dir, directory)):
             non_car_fnames.append(os.path.join(non_car_dir, directory, fname))
+    print('finish reading non-car file names.')
 
     vd = VehicleDetector()
     clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames)
 
     image = mpimg.imread('test_images/test1.jpg')
-    windows = vd.slide_window(image)
-    scaler = vd.get_scaler()
-    hot_windows = vd.search_windows(image, windows, vd.clf, vd.scaler)
-    print(hot_windows)
+    windows = vd.slide_window(image, x_start_stop=[None, None], y_start_stop=[None, None], xy_window=(96, 96), xy_overlap=(0.5, 0.5))
+    hot_windows = vd.search_windows(image, windows, clf, scaler)
+    print(len(hot_windows))
+
+    window_img = vd.draw_boxes(image, hot_windows, thick=6) 
+    plt.imshow(window_img)
+    plt.show()
 
 
 
