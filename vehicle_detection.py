@@ -15,6 +15,21 @@ class VehicleDetector:
         self.clf = None
         self.scaler = None
 
+    def convert_img_color(self, img, cspace='HLS'):
+        if cspace == 'YCrCb':
+            return cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
+        if cspace == 'BGR2YCrCb':
+            return cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+        if cspace == 'HSV':
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+            img[:,:,0] = img[:,:,0]/360
+            return img
+        if cspace == 'HLS':
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+            img[:,:,0] = img[:,:,0]/360
+            return img
+        return np.copy(img)
+
     def color_hist(self, img, nbins=32, bins_range=(0, 256)):
         """
         Compute the histogram of the color channels
@@ -41,22 +56,11 @@ class VehicleDetector:
         print("Scaler saved as: ", scaler_fname)
         return X_scaler
 
-    def extract_features(self, fnames, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256), orient=9, pix_per_cell=8,
-                    cell_per_block=2, vis=False, feature_vec=True, hog_channel='ALL'):
+    def extract_features(self, fnames, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256), orient=9, pix_per_cell=8,cell_per_block=2, vis=False, feature_vec=True, hog_channel='ALL'):
         features = []
         for fname in fnames:
             img = mpimg.imread(fname)
-            if cspace != 'RGB':
-                if cspace == 'HSV':
-                    feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-                elif cspace == 'LUV':
-                    feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
-                elif cspace == 'HLS':
-                    feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-                elif cspace == 'YUV':
-                    feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
-            else:
-                feature_img = np.copy(img)
+            feature_img = self.convert_img_color(img, cspace)
             spatial_features = cv2.resize(feature_img, spatial_size).ravel()
             hist_features = self.color_hist(feature_img, nbins=hist_nbins, bins_range=hist_bins_range)
             if hog_channel == 'ALL':
@@ -71,20 +75,9 @@ class VehicleDetector:
         features = np.vstack(features).astype(np.float64)
         return features
 
-    def extract_single_image_features(self, img, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, orient=9, pix_per_cell=8, cell_per_block=2, spatial_feat=True, hist_feat=True, hog_feat=True, hog_channel='ALL'):
+    def extract_single_image_features(self, img, cspace='RGB', spatial_size=(32, 32), hist_nbins=32, hist_bins_range=(0, 256), orient=9, pix_per_cell=8, cell_per_block=2, spatial_feat=True, hist_feat=True, hog_feat=True, hog_channel='ALL'):
         img_features = []
-        if cspace != 'RGB':
-            if cspace == 'HSV':
-                feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-            elif cspace == 'LUV':
-                feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
-            elif cspace == 'HLS':
-                feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
-            elif cspace == 'YUV':
-                feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
-            elif cspace == 'YCrCb':
-                feature_img = cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
-        else: feature_img = np.copy(img)
+        feature_img = self.convert_img_color(img, cspace)
         if spatial_feat:
             spatial_features = cv2.resize(feature_img, spatial_size).ravel()
             img_features.append(spatial_features)
@@ -111,7 +104,7 @@ class VehicleDetector:
             y_start_stop[0] = 0
         if y_start_stop[1] == None:
             y_start_stop[1] = img.shape[0]
-        # Compute the span of the region to be searched    
+        # Compute the span of the region to be searched
         xspan = x_start_stop[1] - x_start_stop[0]
         yspan = y_start_stop[1] - y_start_stop[0]
         # Compute the number of pixels per step in x/y
@@ -145,9 +138,10 @@ class VehicleDetector:
         on_windows = []
         for window in windows:
             test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))
-            features = self.extract_single_image_features(test_img, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=hog_channel, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat)
-            test_features = scaler.transform(np.array(features).reshape(1, -1))
-            prediction = clf.predict(test_features)
+
+            features = self.extract_single_image_features(test_img, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, hog_channel=hog_channel, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat)
+            scaled_features = scaler.transform(np.array(features).reshape(1, -1))
+            prediction = clf.predict(scaled_features)
             if prediction == 1:
                 on_windows.append(window)
         return on_windows
@@ -205,22 +199,12 @@ class VehicleDetector:
         print('trained and set new model.')
         return clf, scaler
 
-    def convert_color(self, img, conv='HSV'):
-        if conv == 'YCrCb':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
-        if conv == 'BGR2YCrCb':
-            return cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-        if conv == 'LUV':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
-        if conv == 'HSV':
-            return cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
-
     def find_cars(self, img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins):
         draw_img = np.copy(img)
         #img = img.astype(np.float32)/255
         
         img_tosearch = img[ystart:ystop,:,:]
-        ctrans_tosearch = self.convert_color(img_tosearch, conv='HSV')
+        ctrans_tosearch = self.convert_img_color(img_tosearch, conv='HSV')
         if scale != 1:
             imshape = ctrans_tosearch.shape
             ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
@@ -302,21 +286,22 @@ if __name__ == '__main__':
     print('finish reading non-car file names.')
 
     # parameter settings
-    update_models = 0
+    update_models = False
     cspace = 'HLS' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 12  # HOG orientations
+    orient = 9  # HOG orientations
     pix_per_cell = 8 # HOG pixels per cell
     cell_per_block = 2 # HOG cells per block
     hog_channel = 'ALL' # Can be 0, 1, 2, or "ALL"
     spatial_size = (32, 32) # Spatial binning dimensions
     hist_nbins = 16    # Number of histogram bins
-    hist_bins_range = (0, 256)
+    hist_bins_range = (0, 255)
     vis = False
     feature_vec = True
     spatial_feat = True # Spatial features on or off
     hist_feat = True # Histogram features on or off
     hog_feat = True # HOG features on or off
-    x_start_stops = [[400, 1000], [300, 1100], [200, 1200], [100, None]]
+    #x_start_stops = [[400, 1000], [300, 1100], [200, 1200], [100, None]]
+    x_start_stops = [[100, None], [100, None], [100, None], [100, None]]
     y_start_stop = (400, 650) # Min and max in y to search in slide_window()
     xy_overlap = (0.5, 0.5)
     xy_windows = [(64, 64), (96, 96), (128, 128), (160, 160)]
@@ -325,8 +310,8 @@ if __name__ == '__main__':
     vd = VehicleDetector()
     clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
 
-    image = mpimg.imread('test_images/test2.jpg')
-    image = image.astype(np.float32)/255
+    image = mpimg.imread('test_images/test1.jpg')
+    image = image.astype(np.float32)/255 # convert to 0 to 1
 
     windows = []
     for i in range(len(xy_windows)):
@@ -334,15 +319,15 @@ if __name__ == '__main__':
         xy_window = xy_windows[i]
         windows.extend(vd.slide_window(image, x_start_stop=x_start_stop, y_start_stop=y_start_stop, xy_window=xy_window, xy_overlap=xy_overlap))
 
-    print(len(windows))
     hot_windows = vd.search_windows(image, windows, clf, scaler, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat, hog_channel=hog_channel)
+    print(len(hot_windows))
 
     ystart = 400
     ystop = 650
     scale = 1.2
 
     window_img = vd.draw_boxes(image, hot_windows, thick=6)
-    window_img = vd.find_cars(image, ystart, ystop, scale, clf, scaler, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
+    #window_img = vd.find_cars(image, ystart, ystop, scale, clf, scaler, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
     plt.imshow(window_img)
     plt.show()
 
