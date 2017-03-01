@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import pickle
+from scipy.ndimage.measurements import label
 from skimage.feature import hog
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -205,7 +206,7 @@ class VehicleDetector:
         img_tosearch = img[ystart:ystop,:,:]
         ctrans_tosearch_base = self.convert_img_color(img_tosearch, cspace=cspace)
 
-        scales = [1, 1.5]
+        scales = [1, 1.2, 1.5]
         for scale in scales:
             if scale != 1:
                 imshape = ctrans_tosearch_base.shape
@@ -224,7 +225,7 @@ class VehicleDetector:
             # 64 was the orginal sampling rate, with 8 cells and 8 pix per cell
             window = 64
             nblocks_per_window = (window // pix_per_cell)-1 
-            cells_per_step = 2  # Instead of overlap, define how many cells to step
+            cells_per_step = 2 # Instead of overlap, define how many cells to step
             nxsteps = (nxblocks - nblocks_per_window) // cells_per_step
             nysteps = (nyblocks - nblocks_per_window) // cells_per_step
             
@@ -266,6 +267,26 @@ class VehicleDetector:
                         cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6) 
         return draw_img
 
+    def apply_head_threshold(self, heatmap, bboxes, threshold):
+        for box in bboxes:
+            heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+        heatmap[heatmap<=threshold] = 0
+        return heatmap
+
+    def draw_labeled_bboxes(self, img, labels):
+        # Iterate through all detected cars
+        for car_number in range(1, labels[1]+1):
+            # Find pixels with each car_number label value
+            nonzero = (labels[0] == car_number).nonzero()
+            # Identify x and y values of those pixels
+            nonzeroy = np.array(nonzero[0])
+            nonzerox = np.array(nonzero[1])
+            # Define a bounding box based on min/max x and y
+            bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+            # Draw the box on the image
+            cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
+        # Return the image
+        return img
 
 
 if __name__ == '__main__':
@@ -335,6 +356,16 @@ if __name__ == '__main__':
     window_img = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
     plt.imshow(window_img)
     plt.show()
+
+    heat = np.zeros_like(image[:,:,0]).astype(np.float)
+    heat = vd.apply_head_threshold(heat, hot_windows, 1)
+    plt.imshow(heat, cmap='hot')
+    plt.show()
+    labels = label(heat)
+    draw_img = vd.draw_labeled_bboxes(np.copy(image), labels)
+    plt.imshow(draw_img)
+    plt.show()
+
 
 
 
