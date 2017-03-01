@@ -205,20 +205,22 @@ class VehicleDetector:
         print('trained and set new model.')
         return clf, scaler
 
-    def convert_color(self, img, conv='RGB2YCrCb'):
-        if conv == 'RGB2YCrCb':
+    def convert_color(self, img, conv='HSV'):
+        if conv == 'YCrCb':
             return cv2.cvtColor(img, cv2.COLOR_RGB2YCrCb)
         if conv == 'BGR2YCrCb':
             return cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-        if conv == 'RGB2LUV':
+        if conv == 'LUV':
             return cv2.cvtColor(img, cv2.COLOR_RGB2LUV)
+        if conv == 'HSV':
+            return cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
 
     def find_cars(self, img, ystart, ystop, scale, svc, X_scaler, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins):
         draw_img = np.copy(img)
-        img = img.astype(np.float32)/255
+        #img = img.astype(np.float32)/255
         
         img_tosearch = img[ystart:ystop,:,:]
-        ctrans_tosearch = self.convert_color(img_tosearch, conv='RGB2YCrCb')
+        ctrans_tosearch = self.convert_color(img_tosearch, conv='HSV')
         if scale != 1:
             imshape = ctrans_tosearch.shape
             ctrans_tosearch = cv2.resize(ctrans_tosearch, (np.int(imshape[1]/scale), np.int(imshape[0]/scale)))
@@ -264,7 +266,8 @@ class VehicleDetector:
                 hist_features = self.color_hist(subimg, nbins=hist_bins)
 
                 # Scale features and make a prediction
-                test_features = X_scaler.transform(np.hstack((spatial_features, hist_features, hog_features)).reshape(1, -1))    
+                test_features = X_scaler.transform(np.hstack((spatial_features, hist_features, hog_features)).reshape(1, -1))
+
                 #test_features = X_scaler.transform(np.hstack((shape_feat, hist_feat)).reshape(1, -1))    
                 test_prediction = svc.predict(test_features)
                 
@@ -322,7 +325,7 @@ if __name__ == '__main__':
     vd = VehicleDetector()
     clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
 
-    image = mpimg.imread('test_images/test6.jpg')
+    image = mpimg.imread('test_images/test2.jpg')
     image = image.astype(np.float32)/255
 
     windows = []
@@ -336,7 +339,7 @@ if __name__ == '__main__':
 
     ystart = 400
     ystop = 650
-    scale = 2
+    scale = 1.2
 
     window_img = vd.draw_boxes(image, hot_windows, thick=6)
     window_img = vd.find_cars(image, ystart, ystop, scale, clf, scaler, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
