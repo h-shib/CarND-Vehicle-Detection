@@ -10,11 +10,33 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.svm import LinearSVC
 from time import time
+from moviepy.editor import VideoFileClip
 
 class VehicleDetector:
     def __init_(self):
         self.clf = None
         self.scaler = None
+        self.update_models = False
+        self.cspace = 'HLS' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
+        self.orient = 9  # HOG orientations
+        self.pix_per_cell = 8 # HOG pixels per cell
+        self.cell_per_block = 2 # HOG cells per block
+        self.hog_channel = 'ALL' # Can be 0, 1, 2, or "ALL"
+        self.spatial_size = (32, 32) # Spatial binning dimensions
+        self.hist_nbins = 16    # Number of histogram bins
+        self.hist_bins_range = (0, 255)
+        self.vis = False
+        self.feature_vec = True
+        self.spatial_feat = True # Spatial features on or off
+        self.hist_feat = True # Histogram features on or off
+        self.hog_feat = True # HOG features on or off
+        self.x_start_stops = [[100, None], [100, None], [100, None], [100, None]]
+        self.y_start_stop = (400, 650) # Min and max in y to search in self.slide_window()
+        self.xy_overlap = (0.5, 0.5)
+        self.xy_windows = [(64, 64), (96, 96), (128, 128), (160, 160)]
+        self.ystart = 400
+        self.ystop = 650
+        self.scale = 1.5
 
     def convert_img_color(self, img, cspace='HLS'):
         if cspace == 'YCrCb':
@@ -202,6 +224,7 @@ class VehicleDetector:
 
     def find_cars(self, img, ystart, ystop, scale, clf, scaler, cspace, orient, pix_per_cell, cell_per_block, spatial_size, hist_bins):
         draw_img = np.copy(img)
+        hot_windows = []
 
         img_tosearch = img[ystart:ystop,:,:]
         ctrans_tosearch_base = self.convert_img_color(img_tosearch, cspace=cspace)
@@ -264,8 +287,9 @@ class VehicleDetector:
                         xbox_left = np.int(xleft*scale)
                         ytop_draw = np.int(ytop*scale)
                         win_draw = np.int(window*scale)
-                        cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6) 
-        return draw_img
+                        cv2.rectangle(draw_img,(xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart),(0,0,255),6)
+                        hot_windows.append(((xbox_left, ytop_draw+ystart),(xbox_left+win_draw,ytop_draw+win_draw+ystart)))
+        return draw_img, hot_windows
 
     def apply_head_threshold(self, heatmap, bboxes, threshold):
         for box in bboxes:
@@ -287,6 +311,16 @@ class VehicleDetector:
             cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
         # Return the image
         return img
+
+    def process_image(self, image):
+        draw_img = np.copy(image)
+        image = image.astype(np.float32)/255
+        window_img, hot_windows = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins) # todo: set all features as class parameters
+        heat = np.zeros_like(image[:,:,0]).astype(np.float)
+        heat = vd.apply_head_threshold(heat, hot_windows, 10)
+        labels = label(heat)
+        draw_img = vd.draw_labeled_bboxes(draw_img, labels)
+        return draw_img
 
 
 if __name__ == '__main__':
@@ -330,15 +364,19 @@ if __name__ == '__main__':
     y_start_stop = (400, 650) # Min and max in y to search in slide_window()
     xy_overlap = (0.5, 0.5)
     xy_windows = [(64, 64), (96, 96), (128, 128), (160, 160)]
+    ystart = 400
+    ystop = 650
+    scale = 1.5
 
 
     vd = VehicleDetector()
     clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
 
-    image = mpimg.imread('test_images/test1.jpg')
+    image = mpimg.imread('test_images/test5.jpg')
     image = image.astype(np.float32)/255 # convert to 0 to 1
     print(image.shape)
 
+    """
     windows = []
     for i in range(len(xy_windows)):
         x_start_stop = x_start_stops[i]
@@ -347,24 +385,31 @@ if __name__ == '__main__':
 
     hot_windows = vd.search_windows(image, windows, clf, scaler, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat, hog_channel=hog_channel)
     print(len(hot_windows))
-
-    ystart = 400
-    ystop = 650
-    scale = 1.5
-
     window_img = vd.draw_boxes(image, hot_windows, thick=6)
-    window_img = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
+    """
+
+    window_img, hot_windows = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
     plt.imshow(window_img)
-    plt.show()
+    #plt.show()
 
     heat = np.zeros_like(image[:,:,0]).astype(np.float)
-    heat = vd.apply_head_threshold(heat, hot_windows, 1)
+    heat = vd.apply_head_threshold(heat, hot_windows, 10)
     plt.imshow(heat, cmap='hot')
-    plt.show()
+    #plt.show()
     labels = label(heat)
     draw_img = vd.draw_labeled_bboxes(np.copy(image), labels)
     plt.imshow(draw_img)
-    plt.show()
+    #\plt.show()
+
+    #####
+    vd = VehicleDetector()
+    clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
+
+    output = 'test_video_result.mp4'
+    clip_input = VideoFileClip("test_video.mp4")
+    
+    clip = clip_input.fl_image(lambda x: vd.process_image(x))
+    clip.write_videofile(output, audio=False)
 
 
 
