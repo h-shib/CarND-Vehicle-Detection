@@ -315,9 +315,22 @@ class VehicleDetector:
     def process_image(self, image):
         draw_img = np.copy(image)
         image = image.astype(np.float32)/255
+
+        """
+        windows = []
+        for i in range(len(xy_windows)):
+            x_start_stop = x_start_stops[i]
+            xy_window = xy_windows[i]
+            windows.extend(vd.slide_window(image, x_start_stop=x_start_stop, y_start_stop=y_start_stop, xy_window=xy_window, xy_overlap=xy_overlap))
+
+        hot_windows = vd.search_windows(image, windows, clf, scaler, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat, hog_channel=hog_channel)
+        window_img = vd.draw_boxes(image, hot_windows, thick=6)
+        """
+
         window_img, hot_windows = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins) # todo: set all features as class parameters
+
         heat = np.zeros_like(image[:,:,0]).astype(np.float)
-        heat = vd.apply_head_threshold(heat, hot_windows, 10)
+        heat = vd.apply_head_threshold(heat, hot_windows, 5)
         labels = label(heat)
         draw_img = vd.draw_labeled_bboxes(draw_img, labels)
         return draw_img
@@ -347,13 +360,13 @@ if __name__ == '__main__':
     # parameter settings
     update_models = False
     cspace = 'HLS' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 9  # HOG orientations
+    orient = 12  # HOG orientations
     pix_per_cell = 8 # HOG pixels per cell
     cell_per_block = 2 # HOG cells per block
     hog_channel = 'ALL' # Can be 0, 1, 2, or "ALL"
-    spatial_size = (32, 32) # Spatial binning dimensions
+    spatial_size = (64, 64) # Spatial binning dimensions
     hist_nbins = 16    # Number of histogram bins
-    hist_bins_range = (0, 255)
+    hist_bins_range = (0, 1)
     vis = False
     feature_vec = True
     spatial_feat = True # Spatial features on or off
@@ -399,14 +412,14 @@ if __name__ == '__main__':
     labels = label(heat)
     draw_img = vd.draw_labeled_bboxes(np.copy(image), labels)
     plt.imshow(draw_img)
-    #\plt.show()
+    #plt.show()
 
     #####
     vd = VehicleDetector()
-    clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
+    clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=False, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
 
-    output = 'test_video_result.mp4'
-    clip_input = VideoFileClip("test_video.mp4")
+    output = 'project_video_result.mp4'
+    clip_input = VideoFileClip("project_video.mp4")
     
     clip = clip_input.fl_image(lambda x: vd.process_image(x))
     clip.write_videofile(output, audio=False)
