@@ -16,27 +16,6 @@ class VehicleDetector:
     def __init_(self):
         self.clf = None
         self.scaler = None
-        self.update_models = False
-        self.cspace = 'HLS' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-        self.orient = 9  # HOG orientations
-        self.pix_per_cell = 8 # HOG pixels per cell
-        self.cell_per_block = 2 # HOG cells per block
-        self.hog_channel = 'ALL' # Can be 0, 1, 2, or "ALL"
-        self.spatial_size = (32, 32) # Spatial binning dimensions
-        self.hist_nbins = 16    # Number of histogram bins
-        self.hist_bins_range = (0, 255)
-        self.vis = False
-        self.feature_vec = True
-        self.spatial_feat = True # Spatial features on or off
-        self.hist_feat = True # Histogram features on or off
-        self.hog_feat = True # HOG features on or off
-        self.x_start_stops = [[100, None], [100, None], [100, None], [100, None]]
-        self.y_start_stop = (400, 650) # Min and max in y to search in self.slide_window()
-        self.xy_overlap = (0.5, 0.5)
-        self.xy_windows = [(64, 64), (96, 96), (128, 128), (160, 160)]
-        self.ystart = 400
-        self.ystop = 650
-        self.scale = 1.5
 
     def convert_img_color(self, img, cspace='HLS'):
         if cspace == 'YCrCb':
@@ -70,9 +49,15 @@ class VehicleDetector:
         if vis == True: return features, hog_image
         else:           return features
         """
-        return hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell), cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=False, visualise=vis, feature_vector=feature_vec)
+        if vis:
+            features, hog_image = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell), cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=False, visualise=vis, feature_vector=feature_vec)
+            return features, hog_image
+        else:
+            features = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell), cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=False, visualise=vis, feature_vector=feature_vec)
+            return features
 
     def get_scaler(self, features):
+        # return scaler and save it
         X_scaler = StandardScaler().fit(features)
         scaler_fname = 'models/vehicle_detect_scaler.p'
         pickle.dump(X_scaler, open(scaler_fname, 'wb'))
@@ -136,14 +121,9 @@ class VehicleDetector:
         # Compute the number of windows in x/y
         nx_buffer = np.int(xy_window[0]*(xy_overlap[0]))
         ny_buffer = np.int(xy_window[1]*(xy_overlap[1]))
-        nx_windows = np.int((xspan-nx_buffer)/nx_pix_per_step) 
-        ny_windows = np.int((yspan-ny_buffer)/ny_pix_per_step) 
-        # Initialize a list to append window positions to
+        nx_windows = np.int((xspan-nx_buffer)/nx_pix_per_step)
+        ny_windows = np.int((yspan-ny_buffer)/ny_pix_per_step)
         window_list = []
-        # Loop through finding x and y window positions
-        # Note: you could vectorize this step, but in practice
-        # you'll be considering windows one by one with your
-        # classifier, so looping makes sense
         for ys in range(ny_windows):
             for xs in range(nx_windows):
                 # Calculate window position
@@ -316,21 +296,18 @@ class VehicleDetector:
         draw_img = np.copy(image)
         image = image.astype(np.float32)/255
 
-        """
         windows = []
         for i in range(len(xy_windows)):
             x_start_stop = x_start_stops[i]
+            y_start_stop = y_start_stops[i]
             xy_window = xy_windows[i]
             windows.extend(vd.slide_window(image, x_start_stop=x_start_stop, y_start_stop=y_start_stop, xy_window=xy_window, xy_overlap=xy_overlap))
 
         hot_windows = vd.search_windows(image, windows, clf, scaler, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat, hog_channel=hog_channel)
+
         window_img = vd.draw_boxes(image, hot_windows, thick=6)
-        """
-
-        window_img, hot_windows = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins) # todo: set all features as class parameters
-
         heat = np.zeros_like(image[:,:,0]).astype(np.float)
-        heat = vd.apply_head_threshold(heat, hot_windows, 5)
+        heat = vd.apply_head_threshold(heat, hot_windows, 1)
         labels = label(heat)
         draw_img = vd.draw_labeled_bboxes(draw_img, labels)
         return draw_img
@@ -358,73 +335,45 @@ if __name__ == '__main__':
     print('finish reading non-car file names.')
 
     # parameter settings
-    update_models = False
-    cspace = 'HLS' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
-    orient = 12  # HOG orientations
-    pix_per_cell = 8 # HOG pixels per cell
-    cell_per_block = 2 # HOG cells per block
-    hog_channel = 'ALL' # Can be 0, 1, 2, or "ALL"
-    spatial_size = (64, 64) # Spatial binning dimensions
-    hist_nbins = 16    # Number of histogram bins
-    hist_bins_range = (0, 1)
-    vis = False
-    feature_vec = True
-    spatial_feat = True # Spatial features on or off
-    hist_feat = True # Histogram features on or off
-    hog_feat = True # HOG features on or off
-    #x_start_stops = [[400, 1000], [300, 1100], [200, 1200], [100, None]]
-    x_start_stops = [[100, None], [100, None], [100, None], [100, None]]
-    y_start_stop = (400, 650) # Min and max in y to search in slide_window()
-    xy_overlap = (0.5, 0.5)
-    xy_windows = [(64, 64), (96, 96), (128, 128), (160, 160)]
-    ystart = 400
-    ystop = 650
-    scale = 1.5
+    update_models = True
+    cspace = 'YCrCb'         # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
+    orient = 9               # HOG orientations
+    pix_per_cell = 8         # HOG pixels per cell
+    cell_per_block = 2       # HOG cells per block
+    hog_channel = 'ALL'      # Can be 0, 1, 2, or "ALL"
+    spatial_size = (64, 64)  # Spatial binning dimensions
+    hist_nbins = 32          # Number of histogram bins
+    hist_bins_range = (0, 1) # Bins range of histogram
+    vis = False              # visualization on or off
+    feature_vec = True       # return features 
+    spatial_feat = True      # Spatial features on or off
+    hist_feat = True         # Histogram features on or off
+    hog_feat = True          # HOG features on or off
+
+    x_start_stops = [[350, 1250], # window search area x
+                     [200, 1250],
+                     [200, 1250],
+                     [50, 1250],
+                     [50, 1250]]
+    y_start_stops = [[400, 496], # window search area y
+                     [400, 544],
+                     [400, 592],
+                     [400, 640],
+                     [400, 650]]
+    xy_windows    = [(64, 64), # window sizes
+                     (96, 96),
+                     (128, 128),
+                     (160, 160),
+                     (200, 200)]
+    xy_overlap    = (0.75, 0.75) # overlap area
 
 
-    vd = VehicleDetector()
+    # initialize detector and train classifier and scaler
+    vd = VehicleDetector() # TODO: set initial parameters
     clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
 
-    image = mpimg.imread('test_images/test5.jpg')
-    image = image.astype(np.float32)/255 # convert to 0 to 1
-    print(image.shape)
-
-    """
-    windows = []
-    for i in range(len(xy_windows)):
-        x_start_stop = x_start_stops[i]
-        xy_window = xy_windows[i]
-        windows.extend(vd.slide_window(image, x_start_stop=x_start_stop, y_start_stop=y_start_stop, xy_window=xy_window, xy_overlap=xy_overlap))
-
-    hot_windows = vd.search_windows(image, windows, clf, scaler, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat, hog_channel=hog_channel)
-    print(len(hot_windows))
-    window_img = vd.draw_boxes(image, hot_windows, thick=6)
-    """
-
-    window_img, hot_windows = vd.find_cars(image, ystart, ystop, scale, clf, scaler, cspace=cspace, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_size=spatial_size, hist_bins=hist_nbins)
-    plt.imshow(window_img)
-    #plt.show()
-
-    heat = np.zeros_like(image[:,:,0]).astype(np.float)
-    heat = vd.apply_head_threshold(heat, hot_windows, 10)
-    plt.imshow(heat, cmap='hot')
-    #plt.show()
-    labels = label(heat)
-    draw_img = vd.draw_labeled_bboxes(np.copy(image), labels)
-    plt.imshow(draw_img)
-    #plt.show()
-
-    #####
-    vd = VehicleDetector()
-    clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=False, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
-
-    output = 'project_video_result.mp4'
-    clip_input = VideoFileClip("project_video.mp4")
-    
+    # process each image on video
+    output = 'test_video_result3.mp4'
+    clip_input = VideoFileClip("test_video.mp4")
     clip = clip_input.fl_image(lambda x: vd.process_image(x))
     clip.write_videofile(output, audio=False)
-
-
-
-
-
