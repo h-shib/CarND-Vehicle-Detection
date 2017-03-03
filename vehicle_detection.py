@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import pickle
+from collections import deque
 from scipy.ndimage.measurements import label
 from skimage.feature import hog
 from sklearn.preprocessing import StandardScaler
@@ -13,9 +14,10 @@ from time import time
 from moviepy.editor import VideoFileClip
 
 class VehicleDetector:
-    def __init_(self):
+    def __init__(self):
         self.clf = None
         self.scaler = None
+        self.frames = deque([])
 
     def convert_img_color(self, img, cspace='HLS'):
         if cspace == 'YCrCb':
@@ -305,10 +307,18 @@ class VehicleDetector:
 
         hot_windows = vd.search_windows(image, windows, clf, scaler, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, spatial_feat=spatial_feat, hist_feat=hist_feat, hog_feat=hog_feat, hog_channel=hog_channel)
 
-        window_img = vd.draw_boxes(image, hot_windows, thick=6)
         heat = np.zeros_like(image[:,:,0]).astype(np.float)
         heat = vd.apply_head_threshold(heat, hot_windows, 1)
-        labels = label(heat)
+
+        self.frames.append(heat)
+        heat_result = heat
+        if len(self.frames) > 1:
+            for i in range(len(self.frames)-1):
+                heat_result = np.add(heat_result, self.frames[i])
+            if len(self.frames) > 7:
+                self.frames.popleft()
+
+        labels = label(heat_result)
         draw_img = vd.draw_labeled_bboxes(draw_img, labels)
         return draw_img
 
@@ -373,7 +383,7 @@ if __name__ == '__main__':
     clf, scaler = vd.get_trained_models(car_fnames, non_car_fnames, update_models=update_models, cspace=cspace, spatial_size=spatial_size, hist_nbins=hist_nbins, hist_bins_range=hist_bins_range, orient=orient, pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, vis=vis, feature_vec=feature_vec, hog_channel=hog_channel)
 
     # process each image on video
-    output = 'test_video_result3.mp4'
-    clip_input = VideoFileClip("test_video.mp4")
+    output = 'project_video_result.mp4'
+    clip_input = VideoFileClip("project_video.mp4")
     clip = clip_input.fl_image(lambda x: vd.process_image(x))
     clip.write_videofile(output, audio=False)
